@@ -1,18 +1,21 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow,noarchive"><meta name="referrer" content="no-referrer"><meta name="theme-color" content="#171624"><title>一份私享贺卡</title><style>
-*{box-sizing:border-box}body{margin:0;min-height:100svh;background:radial-gradient(ellipse at 50% 20%,#40304b55,transparent 65%),#171624;color:#eee5d8;font-family:"Songti SC",Georgia,serif;display:grid;place-items:center;padding:32px}main{max-width:460px;text-align:center;border:1px solid #e8c48c35;padding:55px 30px;background:#24203077;width:100%}.star{font-size:54px;color:#e8c48c}small{display:block;font:9px/2 system-ui;letter-spacing:3px;color:#c9ad86;margin:20px 0}h1{font-size:28px;line-height:1.7;font-weight:400}p{font-size:13px;line-height:2.2;color:#b9adbf}#gate-status{font:12px/2 system-ui;color:#e8c48c}a{color:#e8c48c;font:12px/2 system-ui}button{border:1px solid #e8c48c55;background:transparent;color:#e8c48c;padding:12px 22px;font:12px system-ui;min-height:44px;cursor:pointer}
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow,noarchive"><meta name="referrer" content="no-referrer"><meta name="theme-color" content="#171622"><title>一份私享贺卡</title><style>
+*{box-sizing:border-box}body{margin:0;min-height:100svh;background:radial-gradient(ellipse at 50% 20%,#40304b55,transparent 65%),#171622;color:#eee5d8;font-family:"Songti SC",Georgia,serif;display:grid;place-items:center;padding:32px}main{max-width:460px;text-align:center;border:1px solid #e8c48c35;padding:52px 28px;background:linear-gradient(145deg,#362b3eaa,#24203077);width:100%;border-radius:32px;box-shadow:0 28px 80px #07041144}.star{font-size:54px;color:#e8c48c}small{display:block;font:9px/2 system-ui;letter-spacing:3px;color:#c9ad86;margin:20px 0}h1{font-size:28px;line-height:1.7;font-weight:400}p{font-size:14px;line-height:2.1;color:#b9adbf}#gate-status{font:13px/2 system-ui;color:#e8c48c}a{color:#e8c48c;font:12px/2 system-ui}button{border:1px solid #e8c48c55;background:transparent;color:#e8c48c;padding:12px 22px;font:13px system-ui;min-height:48px;cursor:pointer;border-radius:999px}
 </style></head><body><main id="invitation-gate"><div class="star">✧</div><small>A PRIVATE INVITATION</small><h1>一份只为收到邀请的你<br>准备的生日贺卡。</h1><p>请使用收到的完整邀请链接打开。<br>普通网址无法解锁贺卡内容。</p><p id="gate-status" role="status">等待完整邀请链接</p><button id="gate-retry" hidden>重新读取邀请链接</button></main>
 <script type="module">
 const status=document.querySelector('#gate-status');
 const params=new URLSearchParams(location.hash.slice(1));
 const invite=params.get('invite');
 const requestedView=params.get('view')||'home';
+// A pasted invitation may change only the hash; decrypt it without requiring a manual refresh.
+const reloadOnInviteChange=()=>{if(new URLSearchParams(location.hash.slice(1)).get('invite')!==invite)location.reload()};
+window.addEventListener('hashchange',reloadOnInviteChange);
 const decode=value=>Uint8Array.from(atob(value),c=>c.charCodeAt(0));
 const scriptSafe=value=>value.replace(/<\/script/gi,'<\\/script');
 async function unlock(){
  if(!invite){status.textContent='没有找到邀请钥匙，请使用发送给你的完整链接。';return}
  if(!/^[A-Za-z0-9_-]{43}$/.test(invite)){status.textContent='邀请链接不完整，请重新复制完整链接。';return}
- if(!crypto.subtle){status.textContent='当前浏览器暂不支持解锁，请使用更新版本的微信或 Safari。';return}
+ if(!globalThis.crypto?.subtle){status.textContent='当前浏览器暂不支持解锁，请使用更新版本的微信或 Safari。';return}
  status.textContent='正在打开你的贺卡……';
  try{
   const response=await fetch('card.enc.json',{cache:'no-store'});if(!response.ok)throw Error('loading');
@@ -24,20 +27,21 @@ async function unlock(){
   const f=bundle.files;for(const name of ['index.html','styles.css','app.js','wish-core.mjs','wish-archive.js','wish-cloud-config.js'])if(typeof f[name]!=='string')throw Error('missing asset');
   const core=URL.createObjectURL(new Blob([f['wish-core.mjs']],{type:'text/javascript'}));
   const archive=URL.createObjectURL(new Blob([f['wish-archive.js'].replace(/(['"])\.\/wish-core\.mjs\1/g,JSON.stringify(core))],{type:'text/javascript'}));
-  let html=f['index.html'].replace(/<link\s+rel="stylesheet"\s+href="styles\.css[^"]*">/,()=>'<style>'+f['styles.css']+'\n.invite-sharing{max-width:1080px;margin:0 auto 30px;padding:24px 25px;text-align:center;border-top:1px solid #dec59e26}.invite-sharing p{font:11px/2 system-ui;color:#b1a9b9}.invite-sharing input{display:block;width:min(100%,650px);margin:15px auto;padding:14px;background:#242130;color:#e8c48c;border:1px solid #dec59e44;font:12px/1.8 system-ui}.invite-sharing input[hidden]{display:none}</style>');
+  let html=f['index.html'].replace(/<link\s+rel="stylesheet"\s+href="styles\.css[^"]*">/,()=>'<style>'+f['styles.css']+'\n.invite-sharing{max-width:1080px;margin:0 auto 30px;padding:30px 25px;text-align:center;border-top:1px solid #dec59e26}.invite-sharing p{font:12px/2 system-ui;color:#c0b7ca}.invite-sharing input{display:block;width:min(100%,650px);margin:15px auto;padding:14px;background:#242130;color:#e8c48c;border:1px solid #dec59e44;border-radius:16px;font:16px/1.8 system-ui}.invite-sharing input[hidden]{display:none}</style>');
   html=html.replace(/<script\s+src="wish-cloud-config\.js[^"]*"><\/script>/,()=>'<script>'+scriptSafe(f['wish-cloud-config.js'])+'<\/script>');
   html=html.replace(/<script\s+src="app\.js[^"]*"><\/script>/,()=>'<script>'+scriptSafe(f['app.js'])+'<\/script>');
   html=html.replace(/<script\s+type="module"\s+src="wish-archive\.js[^"]*"><\/script>/,()=>'<script type="module" src="'+archive+'"><\/script>');
   html=html.replace('<footer>',()=>'<aside class="invite-sharing"><p>私享贺卡 · 请保留完整的邀请链接</p><button class="outline-button" id="copy-invite">复制邀请链接 ↗</button><input id="full-invitation" readonly hidden aria-label="完整邀请链接"></aside><footer>');
   const canonical=()=>{const url=new URL(location.href);url.hash=new URLSearchParams({invite}).toString();return url.href};
   document.open();document.write(html);document.close();
-  const go=view=>{const target=document.getElementById(view);if(target)target.scrollIntoView({behavior:document.body.classList.contains('motion-off')||matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'})};
+  const go=view=>{const behavior=document.body.classList.contains('motion-off')||matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth';if(view==='home'){window.scrollTo({top:0,behavior});return}const target=document.getElementById(view);if(target)target.scrollIntoView({behavior})};
   document.addEventListener('click',event=>{
    const anchor=event.target.closest?.('a[href^="#"]');if(!anchor)return;
    const view=anchor.getAttribute('href').slice(1);if(!document.getElementById(view))return;
    event.preventDefault();const url=new URL(location.href);url.hash=new URLSearchParams({invite,view}).toString();history.pushState(null,'',url);go(view);
   },true);
-  const goFromUrl=()=>go(new URLSearchParams(location.hash.slice(1)).get('view')||'home');
+  const goFromUrl=()=>{reloadOnInviteChange();go(new URLSearchParams(location.hash.slice(1)).get('view')||'home')};
+  window.addEventListener('hashchange',goFromUrl);
   window.addEventListener('popstate',goFromUrl);
   const share=document.querySelector('#copy-invite');
   share?.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(canonical());window.toast?.('完整邀请链接已复制，请只分享给你希望邀请的人。')}catch{const input=document.querySelector('#full-invitation');input.hidden=false;input.value=canonical();input.focus();input.select();window.toast?.('请长按或选中复制完整邀请链接。')}});
