@@ -12,14 +12,24 @@ const reloadOnInviteChange=()=>{if(new URLSearchParams(location.hash.slice(1)).g
 window.addEventListener('hashchange',reloadOnInviteChange);
 const decode=value=>Uint8Array.from(atob(value),c=>c.charCodeAt(0));
 const scriptSafe=value=>value.replace(/<\/script/gi,'<\\/script');
+async function readEnvelope(){
+ const controller=new AbortController();
+ const timer=setTimeout(()=>controller.abort(),20000);
+ try{
+  const response=await fetch('card.enc.json',{cache:'no-store',signal:controller.signal});
+  if(!response.ok)throw Error('loading');
+  const envelope=await response.json();
+  if(envelope.format!=='birthday-invitation-v1'||typeof envelope.iv!=='string'||typeof envelope.box!=='string'||envelope.box.length>2000000)throw Error('format');
+  return envelope;
+ }finally{clearTimeout(timer)}
+}
 async function unlock(){
  if(!invite){status.textContent='没有找到邀请钥匙，请使用发送给你的完整链接。';return}
  if(!/^[A-Za-z0-9_-]{43}$/.test(invite)){status.textContent='邀请链接不完整，请重新复制完整链接。';return}
  if(!globalThis.crypto?.subtle){status.textContent='当前浏览器暂不支持解锁，请使用更新版本的微信或 Safari。';return}
  status.textContent='正在打开你的贺卡……';
  try{
-  const response=await fetch('card.enc.json',{cache:'no-store'});if(!response.ok)throw Error('loading');
-  const envelope=await response.json();if(envelope.format!=='birthday-invitation-v1')throw Error('format');
+  const envelope=await readEnvelope();
   const bytes=decode(invite.replace(/-/g,'+').replace(/_/g,'/')+'=');
   const key=await crypto.subtle.importKey('raw',bytes,'AES-GCM',false,['decrypt']);
   const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:decode(envelope.iv),additionalData:new TextEncoder().encode('birthday-invitation/v1')},key,decode(envelope.box));
@@ -27,27 +37,40 @@ async function unlock(){
   const f=bundle.files;for(const name of ['index.html','styles.css','app.js','wish-core.mjs','wish-archive.js','wish-cloud-config.js'])if(typeof f[name]!=='string')throw Error('missing asset');
   const core=URL.createObjectURL(new Blob([f['wish-core.mjs']],{type:'text/javascript'}));
   const archive=URL.createObjectURL(new Blob([f['wish-archive.js'].replace(/(['"])\.\/wish-core\.mjs\1/g,JSON.stringify(core))],{type:'text/javascript'}));
-  let html=f['index.html'].replace(/<link\s+rel="stylesheet"\s+href="styles\.css[^"]*">/,()=>'<style>'+f['styles.css']+'\n.invite-sharing{max-width:1080px;margin:0 auto 30px;padding:30px 25px;text-align:center;border-top:1px solid #dec59e26}.invite-sharing p{font:12px/2 system-ui;color:#c0b7ca}.invite-sharing input{display:block;width:min(100%,650px);margin:15px auto;padding:14px;background:#242130;color:#e8c48c;border:1px solid #dec59e44;border-radius:16px;font:16px/1.8 system-ui}.invite-sharing input[hidden]{display:none}</style>');
+  let html=f['index.html'].replace(/<link\s+rel="stylesheet"\s+href="styles\.css[^"]*">/,()=>'<style>'+f['styles.css']+'</style>');
   html=html.replace(/<script\s+src="wish-cloud-config\.js[^"]*"><\/script>/,()=>'<script>'+scriptSafe(f['wish-cloud-config.js'])+'<\/script>');
   html=html.replace(/<script\s+src="app\.js[^"]*"><\/script>/,()=>'<script>'+scriptSafe(f['app.js'])+'<\/script>');
   html=html.replace(/<script\s+type="module"\s+src="wish-archive\.js[^"]*"><\/script>/,()=>'<script type="module" src="'+archive+'"><\/script>');
-  html=html.replace('<footer>',()=>'<aside class="invite-sharing"><p>私享贺卡 · 请保留完整的邀请链接</p><button class="outline-button" id="copy-invite">复制邀请链接 ↗</button><input id="full-invitation" readonly hidden aria-label="完整邀请链接"></aside><footer>');
+  html=html.replace('<footer>',()=>'<aside class="invite-sharing"><button class="archive-link" id="copy-invite">复制完整邀请链接 ↗</button><input id="full-invitation" readonly hidden aria-label="完整邀请链接"></aside><footer>');
   const canonical=()=>{const url=new URL(location.href);url.hash=new URLSearchParams({invite}).toString();return url.href};
   document.open();document.write(html);document.close();
-  const go=view=>{const behavior=document.body.classList.contains('motion-off')||matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth';if(view==='home'){window.scrollTo({top:0,behavior});return}const target=document.getElementById(view);if(target)target.scrollIntoView({behavior})};
+  const views=new Set(['home','celebrate','gifts','fortune','wishes','finale']);
+  const viewUrl=view=>{const url=new URL(location.href);url.hash=new URLSearchParams({invite,view}).toString();return url};
+  const markView=view=>document.querySelectorAll('.bottom-nav a[data-card-view]').forEach(a=>{if(a.dataset.cardView===view)a.setAttribute('aria-current','location');else a.removeAttribute('aria-current')});
+  const go=view=>{
+   if(!views.has(view))view='home';
+   const behavior=document.body.classList.contains('motion-off')?'auto':'smooth';
+   markView(view);
+   if(view==='home'){window.scrollTo({top:0,behavior});return}
+   document.getElementById(view)?.scrollIntoView({behavior});
+  };
+  // Make copied, long-pressed and newly opened section links retain their invitation.
+  document.querySelectorAll('a[href^="#"]').forEach(a=>{const view=a.getAttribute('href').slice(1);if(views.has(view)){a.dataset.cardView=view;a.href=viewUrl(view).href}});
   document.addEventListener('click',event=>{
-   const anchor=event.target.closest?.('a[href^="#"]');if(!anchor)return;
-   const view=anchor.getAttribute('href').slice(1);if(!document.getElementById(view))return;
-   event.preventDefault();const url=new URL(location.href);url.hash=new URLSearchParams({invite,view}).toString();history.pushState(null,'',url);go(view);
+   const anchor=event.target.closest?.('a[data-card-view]');
+   if(!anchor||event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
+   const view=anchor.dataset.cardView;if(!views.has(view))return;
+   event.preventDefault();const url=viewUrl(view);if(url.hash!==location.hash)history.pushState(null,'',url);go(view);
   },true);
-  const goFromUrl=()=>{reloadOnInviteChange();go(new URLSearchParams(location.hash.slice(1)).get('view')||'home')};
+  const goFromUrl=()=>{if(new URLSearchParams(location.hash.slice(1)).get('invite')!==invite){location.reload();return}go(new URLSearchParams(location.hash.slice(1)).get('view')||'home')};
   window.addEventListener('hashchange',goFromUrl);
   window.addEventListener('popstate',goFromUrl);
+  markView(views.has(requestedView)?requestedView:'home');
   const share=document.querySelector('#copy-invite');
   share?.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(canonical());window.toast?.('完整邀请链接已复制，请只分享给你希望邀请的人。')}catch{const input=document.querySelector('#full-invitation');input.hidden=false;input.value=canonical();input.focus();input.select();window.toast?.('请长按或选中复制完整邀请链接。')}});
   if(requestedView!=='home')requestAnimationFrame(()=>go(requestedView));
  }catch{
-  status.textContent='邀请钥匙无效，或贺卡暂时未能加载。请检查完整链接并重试。';
+  status.textContent='贺卡暂未打开。请检查网络和完整邀请链接，再轻点重试。';
   const retry=document.querySelector('#gate-retry');if(retry){retry.hidden=false;retry.addEventListener('click',()=>location.reload(),{once:true})}
  }
 }
