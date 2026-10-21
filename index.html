@@ -41,7 +41,7 @@ async function unlock(){
   html=html.replace(/<script\s+src="wish-cloud-config\.js[^"]*"><\/script>/,()=>'<script>'+scriptSafe(f['wish-cloud-config.js'])+'<\/script>');
   html=html.replace(/<script\s+src="app\.js[^"]*"><\/script>/,()=>'<script>'+scriptSafe(f['app.js'])+'<\/script>');
   html=html.replace(/<script\s+type="module"\s+src="wish-archive\.js[^"]*"><\/script>/,()=>'<script type="module" src="'+archive+'"><\/script>');
-  html=html.replace('<footer>',()=>'<aside class="invite-sharing"><button class="archive-link" id="copy-invite">复制完整邀请链接 ↗</button><input id="full-invitation" readonly hidden aria-label="完整邀请链接"></aside><footer>');
+  html=html.replace('<footer>',()=>'<aside class="invite-sharing"><button class="archive-link" id="copy-invite">复制邀请链接</button><input id="full-invitation" readonly hidden aria-label="完整邀请链接"></aside><footer>');
   const canonical=()=>{const url=new URL(location.href);url.hash=new URLSearchParams({invite}).toString();return url.href};
   const policy=document.querySelector('meta[http-equiv="Content-Security-Policy"]');
   if(policy)html=html.replace('<head>','<head>'+policy.outerHTML);
