@@ -46,7 +46,7 @@ async function unlock(){
   const policy=document.querySelector('meta[http-equiv="Content-Security-Policy"]');
   if(policy)html=html.replace('<head>','<head>'+policy.outerHTML);
   document.open();document.write(html);document.close();
-  const views=new Set(['home','celebrate','gifts','fortune','wishes','finale']);
+  const views=new Set(['home','celebrate','gifts','fortune','wishes','finale','experience','journey']);
   const viewUrl=view=>{const url=new URL(location.href);url.hash=new URLSearchParams({invite,view}).toString();return url};
   const markView=view=>document.querySelectorAll('.bottom-nav a[data-card-view]').forEach(a=>{if(a.dataset.cardView===view)a.setAttribute('aria-current','location');else a.removeAttribute('aria-current')});
   const go=view=>{
