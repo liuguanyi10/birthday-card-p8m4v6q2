@@ -12,16 +12,28 @@ const reloadOnInviteChange=()=>{if(new URLSearchParams(location.hash.slice(1)).g
 window.addEventListener('hashchange',reloadOnInviteChange);
 const decode=value=>Uint8Array.from(atob(value),c=>c.charCodeAt(0));
 const scriptSafe=value=>value.replace(/<\/script/gi,'<\\/script');
+const MAX_INVITATION_BYTES=2100000;
 async function readEnvelope(){
  const controller=new AbortController();
  const timer=setTimeout(()=>controller.abort(),20000);
+ let reader;
  try{
-  const response=await fetch('card.enc.json',{cache:'no-store',signal:controller.signal});
+  const response=await fetch('card.enc.json',{cache:'no-store',signal:controller.signal,credentials:'omit',redirect:'error'});
   if(!response.ok)throw Error('loading');
-  const envelope=await response.json();
-  if(envelope.format!=='birthday-invitation-v1'||typeof envelope.iv!=='string'||!/^[A-Za-z0-9+/]{16}$/.test(envelope.iv)||typeof envelope.box!=='string'||envelope.box.length>2000000)throw Error('format');
+  if(Number(response.headers?.get('content-length'))>MAX_INVITATION_BYTES)throw Error('format');
+  let text='';
+  if(response.body?.getReader){
+   reader=response.body.getReader();const decoder=new TextDecoder();let total=0;
+   for(;;){const {done,value}=await reader.read();if(done)break;total+=value.byteLength;if(total>MAX_INVITATION_BYTES)throw Error('format');text+=decoder.decode(value,{stream:true});}
+   text+=decoder.decode();
+  }else{
+   text=await response.text();if(new TextEncoder().encode(text).byteLength>MAX_INVITATION_BYTES)throw Error('format');
+  }
+  const envelope=JSON.parse(text);
+  if(!envelope||envelope.format!=='birthday-invitation-v1'||typeof envelope.iv!=='string'||!/^[A-Za-z0-9+/]{16}$/.test(envelope.iv)||typeof envelope.box!=='string'||envelope.box.length<24||envelope.box.length>2000000||envelope.box.length%4!==0||!/^[A-Za-z0-9+/]+={0,2}$/.test(envelope.box))throw Error('format');
   return envelope;
- }finally{clearTimeout(timer)}
+ }catch(error){controller.abort();if(reader)try{await reader.cancel()}catch{}throw error;}
+ finally{reader?.releaseLock();clearTimeout(timer)}
 }
 async function unlock(){
  if(!invite){status.textContent='没有找到邀请钥匙，请使用发送给你的完整链接。';return}
@@ -49,12 +61,15 @@ async function unlock(){
   const views=new Set(['home','celebrate','gifts','fortune','wishes','finale','experience','journey']);
   const viewUrl=view=>{const url=new URL(location.href);url.hash=new URLSearchParams({invite,view}).toString();return url};
   const markView=view=>document.querySelectorAll('.bottom-nav a[data-card-view]').forEach(a=>{if(a.dataset.cardView===view)a.setAttribute('aria-current','location');else a.removeAttribute('aria-current')});
-  const go=view=>{
+  const go=(view,focus=false)=>{
    if(!views.has(view))view='home';
    const behavior=document.body.classList.contains('motion-off')?'auto':'smooth';
    markView(view);
+   const target=document.getElementById(view);
+   // Explicit navigation moves the reading position; history restoration must not steal focus.
+   if(focus&&target){target.tabIndex=-1;target.focus({preventScroll:true})}
    if(view==='home'){window.scrollTo({top:0,behavior});return}
-   document.getElementById(view)?.scrollIntoView({behavior});
+   target?.scrollIntoView({behavior});
   };
   // Make copied, long-pressed and newly opened section links retain their invitation.
   document.querySelectorAll('a[href^="#"]').forEach(a=>{const view=a.getAttribute('href').slice(1);if(views.has(view)){a.dataset.cardView=view;a.href=viewUrl(view).href}});
@@ -62,7 +77,7 @@ async function unlock(){
    const anchor=event.target.closest?.('a[data-card-view]');
    if(!anchor||event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
    const view=anchor.dataset.cardView;if(!views.has(view))return;
-   event.preventDefault();const url=viewUrl(view);if(url.hash!==location.hash)history.pushState(null,'',url);go(view);
+   event.preventDefault();const url=viewUrl(view);if(url.hash!==location.hash)history.pushState(null,'',url);go(view,true);
   },true);
   const goFromUrl=()=>{if(new URLSearchParams(location.hash.slice(1)).get('invite')!==invite){location.reload();return}go(new URLSearchParams(location.hash.slice(1)).get('view')||'home')};
   window.addEventListener('hashchange',goFromUrl);
